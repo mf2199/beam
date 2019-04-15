@@ -127,12 +127,10 @@ class BigtableSourceTest(unittest.TestCase):
   @mock.patch.object(Table, 'read_rows')
   def test_read(self, mock_read_rows):
     mock_read_rows.return_value = self.__read_list()
-    bigtable = BigtableSource(self.project_id, self.instance_id,
-                              self.table_id)
-    start_position = b''
-    stop_position = b''
-    read = list(bigtable.read(bigtable.get_range_tracker(start_position,
-                                                         stop_position)))
+    bigtable = BigtableSource(self.project_id, self.instance_id, self.table_id)
+    # start_position = b''
+    # stop_position = b''
+    read = list(bigtable.read(bigtable.get_range_tracker(b'', b'')))
     new_read = read
     self.assertEqual(len(new_read), 4)
     for i in read:
