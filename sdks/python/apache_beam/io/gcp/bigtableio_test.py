@@ -128,23 +128,27 @@ class BigtableSourceTest(unittest.TestCase):
   def _key_bytes(self, key):
     return bytes(key) if sys.version_info < (3, 0) else bytes(key, 'utf8')
 
-  def __read_list(self):
-    for i in range(672496, 672500):
-      yield PartialRowData(self._key_bytes('beam_key%07d' % i))
-
   # def __read_list_rebalancing(self):
   #   for i in range(35000, 1214999):
   #     yield PartialRowData(self._key_bytes("beam_key%07d" % i))
 
   @mock.patch.object(Table, 'read_rows')
   def test_read(self, mock_read_rows):
-    mock_read_rows.return_value = self.__read_list()
+
+    pos_start = 672496
+    row_count = 400
+
+    def _mock_read_list():
+      for i in range(pos_start, pos_start + row_count):
+        yield PartialRowData(self._key_bytes('beam_key%07d' % i))
+
+    mock_read_rows.return_value = _mock_read_list()
     bigtable = BigtableSource(self.project_id, self.instance_id, self.table_id)
-    read = list(bigtable.read(bigtable.get_range_tracker(b'', b'')))
-    self.assertEqual(len(read), 4)
-    for i in read:
-      self.assertIsInstance(i, PartialRowData)
-      self.assertNotEqual(i.row_key, b'')
+    rows = list(bigtable.read(bigtable.get_range_tracker()))
+    self.assertEqual(len(rows), row_count)
+    for row in rows:
+      self.assertIsInstance(row, PartialRowData)
+      self.assertNotEqual(row.row_key, b'')
 
   @mock.patch.object(BigtableSource, 'get_sample_row_keys')
   @mock.patch.object(Table, 'read_rows')
@@ -155,22 +159,24 @@ class BigtableSourceTest(unittest.TestCase):
     #   sample_row.offset_bytes = SIZE_768M
     #   return [sample_row]
 
-    def mocking_read_rows(): # 12.2 KB
-      for i in range(0, 10):
+    row_count = 10000
+
+    def _mock_read_rows(): # 12.2 KB
+      for i in range(0, row_count):
         yield PartialRowData(self._key_bytes('beam_key%07d' % i))
 
     # mock_sample_row_keys.return_value = mocking_sample_row_keys()
     mock_sample_row_keys.return_value = self._mock_sample_keys()
-    mock_read_rows.return_value = mocking_read_rows()
+    mock_read_rows.return_value = _mock_read_rows()
     bigtable = BigtableSource(self.project_id, self.instance_id, self.table_id)
 
     for split_bundle in bigtable.split():
       range_tracker = bigtable.get_range_tracker(split_bundle.start_position, split_bundle.stop_position)
-      read = list(bigtable.read(range_tracker))
-      self.assertEqual(len(read), 10)
+      rows = list(bigtable.read(range_tracker))
+      self.assertEqual(len(rows), row_count)
 
-      for row_item in read:
-        self.assertIsInstance(row_item, PartialRowData)
+      for row in rows:
+        self.assertIsInstance(row, PartialRowData)
 
   def _mocking_read_rows(self, **kwargs):  # 12.2 KB
     current_range = RANGES_DICT[kwargs['start_key']]
