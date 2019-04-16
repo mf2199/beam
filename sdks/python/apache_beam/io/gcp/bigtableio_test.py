@@ -180,6 +180,7 @@ class BigtableSourceTest(unittest.TestCase):
 
   def _mocking_read_rows(self, **kwargs):  # 12.2 KB
     current_range = RANGES_DICT[kwargs['start_key']]
+    # print current_range[1] - current_range[0]
     for i in range(current_range[0], current_range[1]):
       yield PartialRowData(self._key_bytes("beam_key%07d" % i))
 
@@ -194,9 +195,13 @@ class BigtableSourceTest(unittest.TestCase):
 
     # add = []
     splits = []
+    # counter = 0
     for split in bigtable.split():
       # add.append(len(list(bigtable.read(bigtable.get_range_tracker(split.start_position, split.stop_position)))))
+      # for row in list(bigtable.read(bigtable.get_range_tracker(split.start_position, split.stop_position))):
+      #   counter += 1
       splits.append(split)
+    # print "row count = ", counter
 
     # print len(splits)
 
