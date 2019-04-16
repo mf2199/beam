@@ -105,9 +105,9 @@ class BigtableSourceTest(unittest.TestCase):
   @mock.patch.object(BigtableSource, 'get_sample_row_keys')
   def test_estimate_size(self, mock_sample_row_keys):
     mock_sample_row_keys.return_value = self._mock_sample_keys(KEYS_1)
-    self.assertEqual(BigtableSource(self.project_id, self.instance_id, self.table_id)
-                     .estimate_size(), SIZE_9984M)
     self.assertTrue(mock_sample_row_keys)
+    self.assertEqual(BigtableSource(self.project_id, self.instance_id, self.table_id)
+                     .estimate_size(), SIZE_768M * len(KEYS_1))
 
   @mock.patch.object(BigtableSource, 'get_sample_row_keys')
   def test_get_range_tracker(self, mock_sample_row_keys):
@@ -120,12 +120,10 @@ class BigtableSourceTest(unittest.TestCase):
     self.assertEqual(range_tracker.stop_position(), pos_stop)
 
   @mock.patch.object(BigtableSource, 'get_sample_row_keys')
-  def test_split_768MB(self, mock_sample_row_keys):
+  def test_split(self, mock_sample_row_keys):
     mock_sample_row_keys.return_value = self._mock_sample_keys(KEYS_1)
-    desired_bundle_size = SIZE_768M
     split_list = list(BigtableSource(self.project_id, self.instance_id, self.table_id).split())
-    size = SIZE_9984M
-    self.assertEqual(len(split_list), int(size / desired_bundle_size))
+    self.assertEqual(len(split_list), int(SIZE_768M * len(KEYS_1) / SIZE_768M))
 
   def _key_bytes(self, key):
     return bytes(key) if sys.version_info < (3, 0) else bytes(key, 'utf8')
@@ -184,9 +182,10 @@ class BigtableSourceTest(unittest.TestCase):
   def test_read_table(self, mock_read_rows, mock_sample_row_keys):
     mock_sample_row_keys.return_value = self._mock_sample_keys(KEYS_2)
     mock_read_rows.side_effect = self._mocking_read_rows
-    bigtable = BigtableSource(project_id=self.project_id,
-                              instance_id=self.instance_id,
-                              table_id=self.table_id)
+    bigtable = BigtableSource(self.project_id, self.instance_id, self.table_id)
+
+    # TODO: Need to implement mock-reader and row counter
+
     # add = []
     splits = []
     for split in bigtable.split():
