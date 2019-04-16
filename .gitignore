@@ -4079,3 +4079,7 @@ venv/Lib/site-packages/future/backports/urllib/parse.py
 venv/Lib/site-packages/future/backports/urllib/error.py
 venv/Lib/site-packages/future/backports/urllib/__init__.py
 venv/Lib/site-packages/beam_bigtable/bigtable_201904111153.py
+venv/Lib/site-packages/beam_bigtable/bigtable_bak.py
+sdks/python/apache_beam/io/gcp/bigtableio_test_bak.py
+venv/Lib/site-packages/beam_bigtable/bigtable_exp.py
+sdks/python/apache_beam/io/gcp/bigtableio_test_exp.py
