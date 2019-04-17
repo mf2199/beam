@@ -33,7 +33,7 @@ LABEL_STAMP = _microseconds_from_datetime(datetime.datetime.utcnow().replace(tzi
 LABELS = {LABEL_KEY: str(LABEL_STAMP)}
 
 TIME_STAMP = datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d-%H%M%S')
-TABLE_ID = 'test-200kkk-write-' + TIME_STAMP
+TABLE_ID = 'test-2000kkk-write-' + TIME_STAMP
 JOB_NAME = TABLE_ID
 
 DISK_SIZE_GB = 50
@@ -67,8 +67,8 @@ PIPELINE_PARAMETERS = [
 
 COLUMN_COUNT = 20
 # ROW_COUNT = 285714286
-ROW_COUNT = 10000000
-BUNDLE_SIZE = 70000
+ROW_COUNT = 100000000
+BUNDLE_SIZE = 700000
 CELL_SIZE = 1000
 ROW_STEP = BUNDLE_SIZE if ROW_COUNT > BUNDLE_SIZE else ROW_COUNT
 
