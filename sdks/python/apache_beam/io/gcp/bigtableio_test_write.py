@@ -112,13 +112,13 @@ def run():
 		.table(TABLE_ID)\
 		.create(column_families=COLUMN_FAMILIES)
 
-	row_ranges = [(str(i), str(min(ROW_COUNT, i + ROW_STEP))) for i in xrange(0, ROW_COUNT, ROW_STEP)]
+	dummy_ranges = [(str(i), str(min(ROW_COUNT, i + ROW_STEP))) for i in xrange(0, ROW_COUNT, ROW_STEP)]
 
 	pipeline_options = PipelineOptions(PIPELINE_PARAMETERS)
 	pipeline_options.view_as(SetupOptions).save_main_session = True
 	p = Pipeline(options=pipeline_options)
 	count = (p
-			 | 'Generate Dummy Ranges' >> beam.Create(row_ranges)
+			 | 'Generate Dummy Ranges' >> beam.Create(dummy_ranges)
 			 | 'GroupByKey' >> GroupByKey()
 			 | 'Generate Dummy Rows' >> ParDo(DummyRowMaker())
 			 | 'Write' >> BigtableWrite(project_id=PROJECT_ID,
