@@ -81,7 +81,7 @@ class BigtableSource(BoundedSource):
                          'filter_': filter_}
     self.sample_row_keys = None
     self.table = None
-    self.read_row = Metrics.counter(self.__class__.__name__, 'read_row')
+    self.row_count = Metrics.counter(self.__class__.__name__, 'Row count')
 
   def __getstate__(self):
     return self.beam_options
@@ -90,7 +90,7 @@ class BigtableSource(BoundedSource):
     self.beam_options = options
     self.table = None
     self.sample_row_keys = None
-    self.read_row = Metrics.counter(self.__class__.__name__, 'read_row')
+    self.row_count = Metrics.counter(self.__class__.__name__, 'Row count')
 
   def _get_table(self):
     if self.table is None:
@@ -160,7 +160,7 @@ class BigtableSource(BoundedSource):
                                            end_key=range_tracker.stop_position(),
                                            filter_=self.beam_options['filter_']):
       if range_tracker.try_claim(row.row_key):
-        self.read_row.inc()
+        self.row_count.inc()
         yield row
       else:
         # TODO: Modify the client ot be able to cancel read_row request
@@ -199,7 +199,7 @@ class _BigtableWriteFn(DoFn):
                          'max_row_bytes': max_row_bytes}
     self.table = None
     self.batcher = None
-    self.written = Metrics.counter(self.__class__, 'Rows Written')
+    self.row_counter = Metrics.counter(self.__class__, 'Rows Written')
 
   def __getstate__(self):
     return self.beam_options
@@ -208,7 +208,7 @@ class _BigtableWriteFn(DoFn):
     self.beam_options = options
     self.table = None
     self.batcher = None
-    self.written = Metrics.counter(self.__class__, 'Rows Written')
+    self.row_counter = Metrics.counter(self.__class__, 'Rows Written')
 
   def start_bundle(self):
     if self.table is None:
@@ -219,7 +219,7 @@ class _BigtableWriteFn(DoFn):
                                                 self.beam_options['max_row_bytes'])
 
   def process(self, element, *args, **kwargs):
-    self.written.inc()
+    self.row_counter.inc()
     self.batcher.mutate(element)
 
   def finish_bundle(self):
