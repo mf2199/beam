@@ -120,7 +120,8 @@ class BigtableSource(BoundedSource):
       return LexicographicKeyRangeTracker(start_position, stop_position)
 
   def estimate_size(self):
-    return list(self.get_sample_row_keys())[-1].offset_bytes
+    # return list(self.get_sample_row_keys())[-1].offset_bytes
+    return self.get_sample_row_keys()[-1].offset_bytes
 
   def split(self, desired_bundle_size=None, start_position=None, stop_position=None):
     """ Splits the source into a set of bundles, using the row_set if it is set.

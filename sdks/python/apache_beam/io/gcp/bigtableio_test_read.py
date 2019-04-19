@@ -181,13 +181,13 @@ INSTANCE_ID = 'python-write-2'
 # JOB_NAME = 'test-2kkk-read-{}'.format(datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d-%H%M%S'))
 # ROW_COUNT = 100000
 
-# TABLE_ID = 'test-200kkk-write-20190417-174735'
-# JOB_NAME = 'test-200kkk-write-20190417-174735-{}'.format(datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d-%H%M%S'))
-# ROW_COUNT = 1000000
+TABLE_ID = 'test-200kkk-write-20190417-174735'
+JOB_NAME = 'test-200kkk-write-20190417-174735-{}'.format(datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d-%H%M%S'))
+ROW_COUNT = 1000000
 
-TABLE_ID = 'test-2000kkk-write-20190417-133838'
-JOB_NAME = 'test-2000kkk-write-20190417-133838-{}'.format(datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d-%H%M%S'))
-ROW_COUNT = 100000000
+# TABLE_ID = 'test-2000kkk-write-20190417-133838'
+# JOB_NAME = 'test-2000kkk-write-20190417-133838-{}'.format(datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d-%H%M%S'))
+# ROW_COUNT = 100000000
 
 REQUIREMENTS_FILE = 'bigtableio_test_requirements.txt'
 DISK_SIZE_GB = 100
