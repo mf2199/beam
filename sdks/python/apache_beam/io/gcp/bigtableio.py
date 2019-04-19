@@ -143,7 +143,12 @@ class BigtableSource(BoundedSource):
     sample_row_keys = list(self.get_sample_row_keys())
     bundles = []
     if len(sample_row_keys) > 0 and sample_row_keys[0] != b'':
-        bundles.append(SourceBundle(sample_row_keys[0].offset_bytes, self, b'', sample_row_keys[0].row_key))
+        bundles.append(
+          SourceBundle(sample_row_keys[0].offset_bytes,
+                       self,
+                       b'',
+                       sample_row_keys[0].row_key))
+
     for i in range(1, len(sample_row_keys)):
       pos_start = sample_row_keys[i - 1].offset_bytes
       pos_stop = sample_row_keys[i].offset_bytes
@@ -167,16 +172,15 @@ class BigtableSource(BoundedSource):
         break
 
   def display_data(self):
-    ret = {'projectId': DisplayDataItem(self.beam_options['project_id'],
-                                        label='Bigtable Project Id',
-                                        key='projectId'),
-           'instanceId': DisplayDataItem(self.beam_options['instance_id'],
-                                         label='Bigtable Instance Id',
-                                         key='instanceId'),
-           'tableId': DisplayDataItem(self.beam_options['table_id'],
-                                      label='Bigtable Table Id',
-                                      key='tableId')}
-    return ret
+    return {'projectId': DisplayDataItem(self.beam_options['project_id'],
+                                         label='Bigtable Project Id',
+                                         key='projectId'),
+            'instanceId': DisplayDataItem(self.beam_options['instance_id'],
+                                          label='Bigtable Instance Id',
+                                          key='instanceId'),
+            'tableId': DisplayDataItem(self.beam_options['table_id'],
+                                       label='Bigtable Table Id',
+                                       key='tableId')}
 
   def to_runner_api_parameter(self, unused_context):
     pass

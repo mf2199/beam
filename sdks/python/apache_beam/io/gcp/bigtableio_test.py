@@ -25,10 +25,7 @@ import unittest
 import mock
 
 from beam_bigtable import BigtableSource
-#from apache_beam.io.gcp.bigtableio import _BigTableSource as BigTableSource
 
-# Protect against environments where bigquery library is not available.
-# pylint: disable=wrong-import-order, wrong-import-position
 try:
   from google.cloud.bigtable import Client
   from google.cloud.bigtable.table import Table
@@ -96,6 +93,7 @@ class BigtableSourceTest(unittest.TestCase):
       sample_row.offset_bytes = SIZE_768M
       yield sample_row
       return
+
     for i, key in enumerate(keys):
       sample_row = SampleRowKeysResponse()
       sample_row.row_key = key
@@ -114,8 +112,8 @@ class BigtableSourceTest(unittest.TestCase):
     mock_sample_row_keys.return_value = self._mock_sample_keys(KEYS_1)
     pos_start = b'beam_key0672496'
     pos_stop = b'beam_key1582279'
-    range_tracker = BigtableSource(self.project_id, self.instance_id, self.table_id)\
-                      .get_range_tracker(pos_start, pos_stop)
+    source = BigtableSource(self.project_id, self.instance_id, self.table_id)
+    range_tracker = source.get_range_tracker(pos_start, pos_stop)
     self.assertEqual(range_tracker.start_position(), pos_start)
     self.assertEqual(range_tracker.stop_position(), pos_stop)
 
@@ -123,7 +121,7 @@ class BigtableSourceTest(unittest.TestCase):
   def test_split(self, mock_sample_row_keys):
     mock_sample_row_keys.return_value = self._mock_sample_keys(KEYS_1)
     split_list = list(BigtableSource(self.project_id, self.instance_id, self.table_id).split())
-    self.assertEqual(len(split_list), int(SIZE_768M * len(KEYS_1) / SIZE_768M))
+    self.assertEqual(len(split_list), len(KEYS_1))
 
   def _key_bytes(self, key):
     return bytes(key) if sys.version_info < (3, 0) else bytes(key, 'utf8')
