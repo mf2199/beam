@@ -1,3 +1,19 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 from __future__ import absolute_import
 
 import datetime
@@ -33,7 +49,7 @@ LABEL_STAMP = _microseconds_from_datetime(datetime.datetime.utcnow().replace(tzi
 LABELS = {LABEL_KEY: str(LABEL_STAMP)}
 
 TIME_STAMP = datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d-%H%M%S')
-TABLE_ID = 'test-2000kkk-write-' + TIME_STAMP
+TABLE_ID = 'test-200kkk-write-' + TIME_STAMP
 JOB_NAME = TABLE_ID
 
 DISK_SIZE_GB = 50
@@ -67,8 +83,8 @@ PIPELINE_PARAMETERS = [
 
 COLUMN_COUNT = 20
 # ROW_COUNT = 285714286
-ROW_COUNT = 100000000
-BUNDLE_SIZE = 700000
+ROW_COUNT = 1000000
+BUNDLE_SIZE = 7000
 CELL_SIZE = 1000
 ROW_STEP = BUNDLE_SIZE if ROW_COUNT > BUNDLE_SIZE else ROW_COUNT
 
@@ -122,8 +138,8 @@ def run():
 			 | 'GroupByKey' >> GroupByKey()
 			 | 'Generate Dummy Rows' >> ParDo(DummyRowMaker())
 			 | 'Write' >> BigtableWrite(project_id=PROJECT_ID,
-										instance_id=INSTANCE_ID,
-										table_id=TABLE_ID))
+																	instance_id=INSTANCE_ID,
+																	table_id=TABLE_ID))
 	p.run()
 
 
