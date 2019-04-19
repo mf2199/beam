@@ -59,7 +59,7 @@ message Annotation {
 // MonitoringInfo protos.
 message MonitoringInfoSpecs {
   enum Enum {
-    // TODO(ajamato): Add the PTRANSFORM name as a required label after
+    // TODO(BEAM-6926): Add the PTRANSFORM name as a required label after
     // upgrading the python SDK.
     USER_COUNTER = 0 [(monitoring_info_spec) = {
       urn: "beam:metric:user:",
@@ -117,6 +117,13 @@ message MonitoringInfoSpecs {
         key: "description",
         value: "The total estimated execution time of the ptransform"
       } ]
+    }];
+
+    // TODO(BEAM-6926): Add the PTRANSFORM name as a required label after
+    // upgrading the python SDK.
+    USER_DISTRIBUTION_COUNTER = 6 [(monitoring_info_spec) = {
+      urn: "beam:metric:user_distribution:",
+      type_urn: "beam:metrics:distribution_int_64",
     }];
   }
 }
@@ -178,33 +185,6 @@ message MonitoringInfo {
   // The walltime of the most recent update.
   // Useful for aggregation for latest types such as LatestInt64.
   google.protobuf.Timestamp timestamp = 6;
-}
-
-message MonitoringInfoUrns {
-  enum Enum {
-    // User counter have this format: 'beam:metric:user:<namespace>:<name>'.
-    USER_COUNTER_URN_PREFIX = 0
-        [(org.apache.beam.model.pipeline.v1.beam_urn) = "beam:metric:user:"];
-
-    ELEMENT_COUNT = 1 [(org.apache.beam.model.pipeline.v1.beam_urn) =
-                           "beam:metric:element_count:v1"];
-
-    START_BUNDLE_MSECS = 2
-        [(org.apache.beam.model.pipeline.v1.beam_urn) =
-             "beam:metric:pardo_execution_time:start_bundle_msecs:v1"];
-
-    PROCESS_BUNDLE_MSECS = 3
-        [(org.apache.beam.model.pipeline.v1.beam_urn) =
-             "beam:metric:pardo_execution_time:process_bundle_msecs:v1"];
-
-    FINISH_BUNDLE_MSECS = 4
-        [(org.apache.beam.model.pipeline.v1.beam_urn) =
-             "beam:metric:pardo_execution_time:finish_bundle_msecs:v1"];
-
-    TOTAL_MSECS = 5
-        [(org.apache.beam.model.pipeline.v1.beam_urn) =
-             "beam:metric:ptransform_execution_time:total_msecs:v1"];
-  }
 }
 
 message MonitoringInfoTypeUrns {

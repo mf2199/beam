@@ -23,6 +23,7 @@ to the Dataflow Service for remote execution by a worker.
 from __future__ import absolute_import
 from __future__ import division
 
+import json
 import logging
 import threading
 import time
@@ -357,34 +358,31 @@ class DataflowRunner(PipelineRunner):
     debug_options = options.view_as(DebugOptions)
     worker_options = options.view_as(WorkerOptions)
     if worker_options.min_cpu_platform:
-      experiments = ["min_cpu_platform=%s" % worker_options.min_cpu_platform]
-      if debug_options.experiments is not None:
-        experiments = list(set(experiments + debug_options.experiments))
-      debug_options.experiments = experiments
+      debug_options.add_experiment('min_cpu_platform=' +
+                                   worker_options.min_cpu_platform)
 
     # Elevate "enable_streaming_engine" to pipeline option, but using the
     # existing experiment.
     google_cloud_options = options.view_as(GoogleCloudOptions)
     if google_cloud_options.enable_streaming_engine:
-      if debug_options.experiments is None:
-        debug_options.experiments = []
-      if "enable_windmill_service" not in debug_options.experiments:
-        debug_options.experiments.append("enable_windmill_service")
-      if "enable_streaming_engine" not in debug_options.experiments:
-        debug_options.experiments.append("enable_streaming_engine")
+      debug_options.add_experiment("enable_windmill_service")
+      debug_options.add_experiment("enable_streaming_engine")
     else:
-      if debug_options.experiments is not None:
-        if ("enable_windmill_service" in debug_options.experiments
-            or "enable_streaming_engine" in debug_options.experiments):
-          raise ValueError("""Streaming engine both disabled and enabled:
-          enableStreamingEngine is set to false, but enable_windmill_service
-          and/or enable_streaming_engine are present. It is recommended you
-          only set enableStreamingEngine.""")
+      if (debug_options.lookup_experiment("enable_windmill_service") or
+          debug_options.lookup_experiment("enable_streaming_engine")):
+        raise ValueError("""Streaming engine both disabled and enabled:
+        enable_streaming_engine flag is not set, but enable_windmill_service
+        and/or enable_streaming_engine experiments are present.
+        It is recommended you only set the enable_streaming_engine flag.""")
 
-    # TODO(BEAM-6664): Remove once Dataflow supports --dataflow_kms_key.
-    if google_cloud_options.dataflow_kms_key is not None:
-      debug_options.add_experiment('service_default_cmek_config=' +
-                                   google_cloud_options.dataflow_kms_key)
+    dataflow_worker_jar = getattr(worker_options, 'dataflow_worker_jar', None)
+    if dataflow_worker_jar is not None:
+      if not apiclient._use_fnapi(options):
+        logging.warn(
+            'Typical end users should not use this worker jar feature. '
+            'It can only be used when FnAPI is enabled.')
+      else:
+        debug_options.add_experiment('use_staged_dataflow_worker_jar')
 
     self.job = apiclient.Job(options, self.proto_pipeline)
 
@@ -406,18 +404,6 @@ class DataflowRunner(PipelineRunner):
 
     # Get a Dataflow API client and set its options
     self.dataflow_client = apiclient.DataflowApplicationClient(options)
-
-    dataflow_worker_jar = getattr(worker_options, 'dataflow_worker_jar', None)
-    if dataflow_worker_jar is not None:
-      if not apiclient._use_fnapi(options):
-        logging.fatal(
-            'Typical end users should not use this worker jar feature. '
-            'It can only be used when fnapi is enabled.')
-
-      experiments = ["use_staged_dataflow_worker_jar"]
-      if debug_options.experiments is not None:
-        experiments = list(set(experiments + debug_options.experiments))
-      debug_options.experiments = experiments
 
     # Create the job description and send a request to the service. The result
     # can be None if there is no need to send a request to the service (e.g.
@@ -590,6 +576,34 @@ class DataflowRunner(PipelineRunner):
           PropertyNames.ENCODING: step.encoding,
           PropertyNames.OUTPUT_NAME: PropertyNames.OUT}])
 
+  def apply_WriteToBigQuery(self, transform, pcoll, options):
+    # Make sure this is the WriteToBigQuery class that we expected, and that
+    # users did not specifically request the new BQ sink by passing experiment
+    # flag.
+
+    # TODO(BEAM-6928): Remove this function for release 2.14.0.
+    experiments = options.view_as(DebugOptions).experiments or []
+    if (not isinstance(transform, beam.io.WriteToBigQuery)
+        or 'use_beam_bq_sink' in experiments):
+      return self.apply_PTransform(transform, pcoll, options)
+    standard_options = options.view_as(StandardOptions)
+    if standard_options.streaming:
+      if (transform.write_disposition ==
+          beam.io.BigQueryDisposition.WRITE_TRUNCATE):
+        raise RuntimeError('Can not use write truncation mode in streaming')
+      return self.apply_PTransform(transform, pcoll, options)
+    else:
+      from apache_beam.io.gcp.bigquery_tools import parse_table_schema_from_json
+      return pcoll  | 'WriteToBigQuery' >> beam.io.Write(
+          beam.io.BigQuerySink(
+              transform.table_reference.tableId,
+              transform.table_reference.datasetId,
+              transform.table_reference.projectId,
+              parse_table_schema_from_json(json.dumps(transform.schema)),
+              transform.create_disposition,
+              transform.write_disposition,
+              kms_key=transform.kms_key))
+
   def apply_GroupByKey(self, transform, pcoll, options):
     # Infer coder of parent.
     #
@@ -688,11 +702,13 @@ class DataflowRunner(PipelineRunner):
     from apache_beam.runners.dataflow.internal import apiclient
     transform_proto = self.proto_context.transforms.get_proto(transform_node)
     transform_id = self.proto_context.transforms.get_id(transform_node)
+    use_fnapi = apiclient._use_fnapi(options)
+    use_unified_worker = apiclient._use_unified_worker(options)
     # The data transmitted in SERIALIZED_FN is different depending on whether
     # this is a fnapi pipeline or not.
-    if (apiclient._use_fnapi(options) and
+    if (use_fnapi and
         (transform_proto.spec.urn == common_urns.primitives.PAR_DO.urn or
-         apiclient._use_unified_worker(options))):
+         use_unified_worker)):
       # Patch side input ids to be unique across a given pipeline.
       if (label_renames and
           transform_proto.spec.urn == common_urns.primitives.PAR_DO.urn):
@@ -751,6 +767,16 @@ class DataflowRunner(PipelineRunner):
                '%s_%s' % (PropertyNames.OUT, side_tag))})
 
     step.add_property(PropertyNames.OUTPUT_INFO, outputs)
+
+    # Add the restriction encoding if we are a splittable DoFn
+    # and are using the Fn API on the unified worker.
+    from apache_beam.runners.common import DoFnSignature
+    signature = DoFnSignature(transform_node.transform.fn)
+    if (use_fnapi and use_unified_worker and signature.is_splittable_dofn()):
+      restriction_coder = (
+          signature.get_restriction_provider().restriction_coder())
+      step.add_property(PropertyNames.RESTRICTION_ENCODING,
+                        self._get_cloud_encoding(restriction_coder, use_fnapi))
 
   @staticmethod
   def _pardo_fn_data(transform_node, get_label):
@@ -1071,9 +1097,6 @@ class DataflowRunner(PipelineRunner):
 class _DataflowSideInput(beam.pvalue.AsSideInput):
   """Wraps a side input as a dataflow-compatible side input."""
 
-  # Dataflow does not yet accept the shared urn definition for access.
-  DATAFLOW_MULTIMAP_URN = 'urn:beam:sideinput:materialization:multimap:0.1'
-
   def _view_options(self):
     return {
         'data': self._data,
@@ -1093,7 +1116,7 @@ class _DataflowIterableSideInput(_DataflowSideInput):
         side_input_data.access_pattern == common_urns.side_inputs.ITERABLE.urn)
     iterable_view_fn = side_input_data.view_fn
     self._data = beam.pvalue.SideInputData(
-        self.DATAFLOW_MULTIMAP_URN,
+        common_urns.side_inputs.MULTIMAP.urn,
         side_input_data.window_mapping_fn,
         lambda multimap: iterable_view_fn(multimap['']))
 
@@ -1108,7 +1131,7 @@ class _DataflowMultimapSideInput(_DataflowSideInput):
     assert (
         side_input_data.access_pattern == common_urns.side_inputs.MULTIMAP.urn)
     self._data = beam.pvalue.SideInputData(
-        self.DATAFLOW_MULTIMAP_URN,
+        common_urns.side_inputs.MULTIMAP.urn,
         side_input_data.window_mapping_fn,
         side_input_data.view_fn)
 

@@ -21,6 +21,7 @@ import collections
 import logging
 import os
 import random
+import shutil
 import sys
 import tempfile
 import threading
@@ -220,7 +221,8 @@ class FnApiRunnerTest(unittest.TestCase):
 
   @unittest.skipIf(sys.version_info >= (3, 6, 0) and
                    os.environ.get('RUN_SKIPPED_PY3_TESTS') != '1',
-                   'This test still needs to be fixed on Python 3.6.')
+                   'This test still needs to be fixed on Python 3.6.'
+                   'See BEAM-6878')
   def test_multimap_side_input(self):
     with self.create_pipeline() as p:
       main = p | 'main' >> beam.Create(['a', 'b'])
@@ -297,6 +299,43 @@ class FnApiRunnerTest(unittest.TestCase):
       expected = [('fired', ts) for ts in (20, 200)]
       assert_that(actual, equal_to(expected))
 
+  def test_pardo_timers_clear(self):
+    if type(self).__name__ != 'FlinkRunnerTest':
+      # FnApiRunner fails to wire multiple timer collections
+      # this method can replace test_pardo_timers when the issue is fixed
+      self.skipTest('BEAM-7074: Multiple timer definitions not supported.')
+
+    timer_spec = userstate.TimerSpec('timer', userstate.TimeDomain.WATERMARK)
+    clear_timer_spec = userstate.TimerSpec('clear_timer',
+                                           userstate.TimeDomain.WATERMARK)
+
+    class TimerDoFn(beam.DoFn):
+      def process(self, element, timer=beam.DoFn.TimerParam(timer_spec),
+                  clear_timer=beam.DoFn.TimerParam(clear_timer_spec)):
+        unused_key, ts = element
+        timer.set(ts)
+        timer.set(2 * ts)
+        clear_timer.set(ts)
+        clear_timer.clear()
+
+      @userstate.on_timer(timer_spec)
+      def process_timer(self):
+        yield 'fired'
+
+      @userstate.on_timer(clear_timer_spec)
+      def process_clear_timer(self):
+        yield 'should not fire'
+
+    with self.create_pipeline() as p:
+      actual = (
+          p
+          | beam.Create([('k1', 10), ('k2', 100)])
+          | beam.ParDo(TimerDoFn())
+          | beam.Map(lambda x, ts=beam.DoFn.TimestampParam: (x, ts)))
+
+      expected = [('fired', ts) for ts in (20, 200)]
+      assert_that(actual, equal_to(expected))
+
   def test_pardo_state_timers(self):
     self._run_pardo_state_timers(False)
 
@@ -362,20 +401,25 @@ class FnApiRunnerTest(unittest.TestCase):
 
   def test_sdf(self):
 
+    class ExpandingStringsDoFn(beam.DoFn):
+      def process(self, element, restriction_tracker=ExpandStringsProvider()):
+        assert isinstance(
+            restriction_tracker,
+            restriction_trackers.OffsetRestrictionTracker), restriction_tracker
+        for k in range(*restriction_tracker.current_restriction()):
+          yield element[k]
+
+    with self.create_pipeline() as p:
+      data = ['abc', 'defghijklmno', 'pqrstuv', 'wxyz']
+      actual = (
+          p
+          | beam.Create(data)
+          | beam.ParDo(ExpandingStringsDoFn()))
+      assert_that(actual, equal_to(list(''.join(data))))
+
+  def test_sdf_with_sdf_initiated_checkpointing(self):
+
     counter = beam.metrics.Metrics.counter('ns', 'my_counter')
-
-    class ExpandStringsProvider(beam.transforms.core.RestrictionProvider):
-      def initial_restriction(self, element):
-        return (0, len(element))
-
-      def create_tracker(self, restriction):
-        return restriction_trackers.OffsetRestrictionTracker(
-            restriction[0], restriction[1])
-
-      def split(self, element, restriction):
-        start, end = restriction
-        middle = (end - start) // 2
-        return [(start, middle), (middle, end)]
 
     class ExpandStringsDoFn(beam.DoFn):
       def process(self, element, restriction_tracker=ExpandStringsProvider()):
@@ -801,6 +845,50 @@ class FnApiRunnerTest(unittest.TestCase):
       print(res._monitoring_infos_by_stage)
       raise
 
+  def test_callbacks_with_exception(self):
+    elements_list = ['1', '2']
+
+    def raise_expetion():
+      raise Exception('raise exception when calling callback')
+
+    class FinalizebleDoFnWithException(beam.DoFn):
+
+      def process(
+          self,
+          element,
+          bundle_finalizer=beam.DoFn.BundleFinalizerParam):
+        bundle_finalizer.register(raise_expetion)
+        yield element
+
+    with self.create_pipeline() as p:
+      res = (p
+             | beam.Create(elements_list)
+             | beam.ParDo(FinalizebleDoFnWithException()))
+      assert_that(res, equal_to(['1', '2']))
+
+  def test_register_finalizations(self):
+    event_recorder = EventRecorder(tempfile.gettempdir())
+    elements_list = ['2', '1']
+
+    class FinalizableDoFn(beam.DoFn):
+      def process(
+          self,
+          element,
+          bundle_finalizer=beam.DoFn.BundleFinalizerParam):
+        bundle_finalizer.register(lambda: event_recorder.record(element))
+        yield element
+
+    with self.create_pipeline() as p:
+      res = (p
+             | beam.Create(elements_list)
+             | beam.ParDo(FinalizableDoFn()))
+
+      assert_that(res, equal_to(elements_list))
+
+    results = event_recorder.events()
+    event_recorder.cleanup()
+    self.assertEqual(results, sorted(elements_list))
+
 
 class FnApiRunnerTestWithGrpc(FnApiRunnerTest):
 
@@ -826,6 +914,9 @@ class FnApiRunnerTestWithBundleRepeat(FnApiRunnerTest):
   def create_pipeline(self):
     return beam.Pipeline(
         runner=fn_api_runner.FnApiRunner(bundle_repeat=3))
+
+  def test_register_finalizations(self):
+    raise unittest.SkipTest("TODO: Avoid bundle finalizations on repeat.")
 
 
 class FnApiRunnerSplitTest(unittest.TestCase):
@@ -986,6 +1077,9 @@ class FnApiRunnerSplitTest(unittest.TestCase):
         # Don't do any initial splitting to simplify test.
         return [restriction]
 
+      def restriction_size(self, element, restriction):
+        return restriction[1] - restriction[0]
+
     class EnumerateSdf(beam.DoFn):
       def process(self, element, restriction_tracker=EnumerateProvider()):
         to_emit = []
@@ -1082,6 +1176,52 @@ _pickled_element_counters = {}
 
 def _unpickle_element_counter(name):
   return _pickled_element_counters[name]
+
+
+class EventRecorder(object):
+  """Used to be registered as a callback in bundle finalization.
+
+  The reason why records are written into a tmp file is, the in-memory dataset
+  cannot keep callback records when passing into one DoFn.
+  """
+  def __init__(self, tmp_dir):
+    self.tmp_dir = os.path.join(tmp_dir, uuid.uuid4().hex)
+    os.mkdir(self.tmp_dir)
+
+  def record(self, content):
+    file_path = os.path.join(self.tmp_dir, uuid.uuid4().hex + '.txt')
+    with open(file_path, 'w') as f:
+      f.write(content)
+
+  def events(self):
+    content = []
+    record_files = [f for f in os.listdir(self.tmp_dir) if os.path.isfile(
+        os.path.join(self.tmp_dir, f))]
+    for file in record_files:
+      with open(os.path.join(self.tmp_dir, file), 'r') as f:
+        content.append(f.read())
+    return sorted(content)
+
+  def cleanup(self):
+    shutil.rmtree(self.tmp_dir)
+
+
+class ExpandStringsProvider(beam.transforms.core.RestrictionProvider):
+  """A RestrictionProvider that used for sdf related tests."""
+  def initial_restriction(self, element):
+    return (0, len(element))
+
+  def create_tracker(self, restriction):
+    return restriction_trackers.OffsetRestrictionTracker(
+        restriction[0], restriction[1])
+
+  def split(self, element, restriction):
+    start, end = restriction
+    middle = (end - start) // 2
+    return [(start, middle), (middle, end)]
+
+  def restriction_size(self, element, restriction):
+    return restriction[1] - restriction[0]
 
 
 if __name__ == '__main__':

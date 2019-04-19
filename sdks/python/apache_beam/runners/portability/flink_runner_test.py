@@ -28,6 +28,8 @@ from shutil import rmtree
 from tempfile import mkdtemp
 
 import apache_beam as beam
+from apache_beam.io.external.generate_sequence import GenerateSequence
+from apache_beam.io.external.kafka import ReadFromKafka
 from apache_beam.metrics import Metrics
 from apache_beam.options.pipeline_options import DebugOptions
 from apache_beam.options.pipeline_options import PortableOptions
@@ -35,6 +37,7 @@ from apache_beam.options.pipeline_options import StandardOptions
 from apache_beam.runners.portability import portable_runner
 from apache_beam.runners.portability import portable_runner_test
 from apache_beam.testing.util import assert_that
+from apache_beam.testing.util import equal_to
 
 if __name__ == '__main__':
   # Run as
@@ -72,6 +75,7 @@ if __name__ == '__main__':
     _use_subprocesses = True
 
     conf_dir = None
+    expansion_port = None
 
     @classmethod
     def tearDownClass(cls):
@@ -104,12 +108,13 @@ if __name__ == '__main__':
           ]))
 
     @classmethod
-    def _subprocess_command(cls, port):
+    def _subprocess_command(cls, job_port, expansion_port):
       # will be cleaned up at the end of this method, and recreated and used by
       # the job server
       tmp_dir = mkdtemp(prefix='flinktest')
 
       cls._create_conf_dir()
+      cls.expansion_port = expansion_port
 
       try:
         return [
@@ -118,9 +123,9 @@ if __name__ == '__main__':
             '--flink-master-url', '[local]',
             '--flink-conf-dir', cls.conf_dir,
             '--artifacts-dir', tmp_dir,
-            '--job-port', str(port),
+            '--job-port', str(job_port),
             '--artifact-port', '0',
-            '--expansion-port', '0',
+            '--expansion-port', str(expansion_port),
         ]
       finally:
         rmtree(tmp_dir)
@@ -152,6 +157,43 @@ if __name__ == '__main__':
 
     def test_no_subtransform_composite(self):
       raise unittest.SkipTest("BEAM-4781")
+
+    def test_external_transforms(self):
+      options = self.create_options()
+      options._all_options['parallelism'] = 1
+      options._all_options['streaming'] = True
+
+      expansion_address = "localhost:" + str(FlinkRunnerTest.expansion_port)
+
+      with self.create_pipeline() as p:
+        res = (
+            p
+            | GenerateSequence(start=1, stop=10,
+                               expansion_service=expansion_address))
+
+        assert_that(res, equal_to([i for i in range(1, 10)]))
+
+      # We expect to fail here because we do not have a Kafka cluster handy.
+      # Nevertheless, we check that the transform is expanded by the
+      # ExpansionService and that the pipeline fails during execution.
+      with self.assertRaises(Exception) as ctx:
+        with self.create_pipeline() as p:
+          # pylint: disable=expression-not-assigned
+          (p
+           | ReadFromKafka(consumer_config={'bootstrap.servers':
+                                            'notvalid1:7777, notvalid2:3531'},
+                           topics=['topic1', 'topic2'],
+                           key_deserializer='org.apache.kafka.'
+                                            'common.serialization.'
+                                            'ByteArrayDeserializer',
+                           value_deserializer='org.apache.kafka.'
+                                              'common.serialization.'
+                                              'LongDeserializer',
+                           expansion_service=expansion_address))
+      self.assertTrue('No resolvable bootstrap urls given in bootstrap.servers'
+                      in str(ctx.exception),
+                      'Expected to fail due to invalid bootstrap.servers, but '
+                      'failed due to:\n%s' % str(ctx.exception))
 
     def test_flattened_side_input(self):
       # Blocked on support for transcoding
@@ -200,6 +242,15 @@ if __name__ == '__main__':
 
     def test_sdf(self):
       raise unittest.SkipTest("BEAM-2939")
+
+    def test_sdf_with_sdf_initiated_checkpointing(self):
+      raise unittest.SkipTest("BEAM-2939")
+
+    def test_callbacks_with_exception(self):
+      raise unittest.SkipTest("BEAM-6868")
+
+    def test_register_finalizations(self):
+      raise unittest.SkipTest("BEAM-6868")
 
     # Inherits all other tests.
 
