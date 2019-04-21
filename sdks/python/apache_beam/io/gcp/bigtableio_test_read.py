@@ -139,6 +139,7 @@ import math
 from sys import platform
 
 import apache_beam as beam
+from apache_beam.io import Read
 from apache_beam.pvalue import PBegin
 from apache_beam.pvalue import PCollection
 from apache_beam.transforms import PTransform
@@ -163,8 +164,8 @@ TIME_STAMP = datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d-%H%M%
 # TABLE_INFO = ('testmillion2ee87b99', 10000)
 # TABLE_INFO = ('testmillion11daf1bf', 24543)
 # TABLE_INFO = ('testbothae323947',    10000)
-# TABLE_INFO = ('testmillion1c1d2c39', 781000)
-TABLE_INFO = ('testmillionc0a4f355', 881000)
+TABLE_INFO = ('testmillion1c1d2c39', 781000)
+# TABLE_INFO = ('testmillionc0a4f355', 881000)
 # TABLE_INFO = ('testmillion9a0b1127', 6000000)
 # TABLE_INFO = ('testmillionb38c02c4', 10000000)
 # TABLE_INFO = ('testmillione320108f', 500000000)
@@ -173,17 +174,18 @@ EXPERIMENTS = 'beam_fn_api'
 PROJECT_ID = 'grass-clump-479'
 INSTANCE_ID = 'python-write-2'
 
-# TABLE_ID = TABLE_INFO[0]
-# JOB_NAME = 'read-' + str(ROW_COUNT) + '-' + TABLE_ID + '-' + TIME_STAMP
-# ROW_COUNT = TABLE_INFO[1]
+TABLE_ID = TABLE_INFO[0]
+ROW_COUNT = TABLE_INFO[1]
+JOB_NAME = 'read-' + str(ROW_COUNT) + '-' + TABLE_ID + '-' + TIME_STAMP
+ROW_COUNT = TABLE_INFO[1]
 
 # TABLE_ID = 'test-2kkk-write-20190417-125057'
 # JOB_NAME = 'test-2kkk-read-{}'.format(datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d-%H%M%S'))
 # ROW_COUNT = 100000
 
-TABLE_ID = 'test-200kkk-write-20190417-174735'
-JOB_NAME = 'test-200kkk-write-20190417-174735-{}'.format(datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d-%H%M%S'))
-ROW_COUNT = 1000000
+# TABLE_ID = 'test-200kkk-write-20190417-174735'
+# JOB_NAME = 'test-200kkk-write-20190417-174735-{}'.format(datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d-%H%M%S'))
+# ROW_COUNT = 1000000
 
 # TABLE_ID = 'test-2000kkk-write-20190417-133838'
 # JOB_NAME = 'test-2000kkk-write-20190417-133838-{}'.format(datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d-%H%M%S'))
@@ -192,7 +194,8 @@ ROW_COUNT = 1000000
 REQUIREMENTS_FILE = 'bigtableio_test_requirements.txt'
 DISK_SIZE_GB = 100
 REGION = 'us-central1'
-RUNNER = 'dataflow'
+# RUNNER = 'dataflow'
+RUNNER = 'direct'
 NUM_WORKERS = 300
 AUTOSCALING_ALGORITHM = 'NONE'
 STAGING_LOCATION = 'gs://mf2199/stage'
@@ -239,10 +242,10 @@ class BigtableRead(PTransform):
 
 
 def run():
-  print 'ProjectID: ', PROJECT_ID
-  print 'InstanceID:', INSTANCE_ID
-  print 'TableID:   ', TABLE_ID
-  print 'JobID:     ', JOB_NAME
+  print 'Project ID: ', PROJECT_ID
+  print 'Instance ID:', INSTANCE_ID
+  print 'Table ID:   ', TABLE_ID
+  print 'Job ID:     ', JOB_NAME
 
   pipeline_options = PipelineOptions([
     '--experiments={}'.format(EXPERIMENTS),
@@ -264,10 +267,15 @@ def run():
   pipeline_options.view_as(SetupOptions).save_main_session = True
 
   p = beam.Pipeline(options=pipeline_options)
+
+  source = BigTableSource(project_id=PROJECT_ID,
+                          instance_id=INSTANCE_ID,
+                          table_id=TABLE_ID)
   count = (p
-            | 'Read from Bigtable' >> BigtableRead(project_id=PROJECT_ID,
-                                                   instance_id=INSTANCE_ID,
-                                                   table_id=TABLE_ID)
+            # | 'Read from Bigtable' >> BigtableRead(project_id=PROJECT_ID,
+            #                                        instance_id=INSTANCE_ID,
+            #                                        table_id=TABLE_ID)
+            | 'Read from Bigtable' >> Read(source)
             | 'Count Rows' >> Count.Globally()
            )
   assert_that(count, equal_to([ROW_COUNT]))
