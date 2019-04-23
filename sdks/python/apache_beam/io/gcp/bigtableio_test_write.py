@@ -42,7 +42,8 @@ from beam_bigtable import WriteToBigTable
 PROJECT_ID = 'grass-clump-479'
 INSTANCE_ID = 'python-write-2'
 CLUSTER_ID = 'python-write-2-c1'
-LOCATION_ID = "us-east1-b"
+# LOCATION_ID = "us-east1-b"
+LOCATION_ID = "us-central1-a"
 EXISTING_INSTANCES = []
 LABEL_KEY = u'python-bigtable-beam'
 LABEL_STAMP = _microseconds_from_datetime(datetime.datetime.utcnow().replace(tzinfo=UTC))
@@ -50,7 +51,8 @@ LABELS = {LABEL_KEY: str(LABEL_STAMP)}
 
 TIME_STAMP = datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d-%H%M%S')
 # TABLE_ID = 'test-200kkk-write-' + TIME_STAMP
-TABLE_ID = 'sample-table-10k-' + TIME_STAMP
+# TABLE_ID = 'sample-table-10k-{}'.format(TIME_STAMP)
+TABLE_ID = 'sample-table-10k-2'
 JOB_NAME = TABLE_ID
 
 DISK_SIZE_GB = 50
@@ -136,12 +138,13 @@ def run():
 	pipeline_options.view_as(SetupOptions).save_main_session = True
 	p = Pipeline(options=pipeline_options)
 	count = (p
-			 | 'Generate Dummy Ranges' >> beam.Create(dummy_ranges)
-			 | 'GroupByKey' >> GroupByKey()
-			 | 'Generate Dummy Rows' >> ParDo(DummyRowMaker())
-			 | 'Write' >> WriteToBigTable(project_id=PROJECT_ID,
-																	instance_id=INSTANCE_ID,
-																	table_id=TABLE_ID))
+					 | 'Generate Dummy Ranges' >> beam.Create(dummy_ranges)
+					 | 'GroupByKey' >> GroupByKey()
+					 | 'Generate Dummy Rows' >> ParDo(DummyRowMaker())
+					 | 'Write' >> WriteToBigTable(project_id=PROJECT_ID,
+																				instance_id=INSTANCE_ID,
+																				table_id=TABLE_ID)
+					 )
 	p.run()
 
 
