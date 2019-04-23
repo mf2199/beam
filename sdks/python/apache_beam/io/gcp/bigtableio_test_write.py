@@ -37,7 +37,7 @@ from google.cloud.bigtable import row
 from google.cloud.bigtable import Client
 from google.cloud.bigtable import column_family
 
-from beam_bigtable import BigtableWrite
+from beam_bigtable import WriteToBigTable
 
 PROJECT_ID = 'grass-clump-479'
 INSTANCE_ID = 'python-write-2'
@@ -49,13 +49,15 @@ LABEL_STAMP = _microseconds_from_datetime(datetime.datetime.utcnow().replace(tzi
 LABELS = {LABEL_KEY: str(LABEL_STAMP)}
 
 TIME_STAMP = datetime.datetime.fromtimestamp(time.time()).strftime('%Y%m%d-%H%M%S')
-TABLE_ID = 'test-200kkk-write-' + TIME_STAMP
+# TABLE_ID = 'test-200kkk-write-' + TIME_STAMP
+TABLE_ID = 'sample-table-10k-' + TIME_STAMP
 JOB_NAME = TABLE_ID
 
 DISK_SIZE_GB = 50
 NUM_WORKERS = 300
 REGION = 'us-central1'
-RUNNER = 'dataflow'
+# RUNNER = 'dataflow'
+RUNNER = 'direct'
 REQUIREMENTS_FILE = 'C:\\git\\beam_bigtable\\beam_bigtable_package\\requirements.txt'
 SETUP_FILE = 'C:\\git\\beam_bigtable\\beam_bigtable_package\\setup.py'
 EXTRA_PACKAGE = 'C:\\git\\beam_bigtable\\beam_bigtable_package\\dist\\beam_bigtable-0.3.117.tar.gz'
@@ -83,7 +85,7 @@ PIPELINE_PARAMETERS = [
 
 COLUMN_COUNT = 20
 # ROW_COUNT = 285714286
-ROW_COUNT = 1000000
+ROW_COUNT = 10000
 BUNDLE_SIZE = 7000
 CELL_SIZE = 1000
 ROW_STEP = BUNDLE_SIZE if ROW_COUNT > BUNDLE_SIZE else ROW_COUNT
@@ -137,7 +139,7 @@ def run():
 			 | 'Generate Dummy Ranges' >> beam.Create(dummy_ranges)
 			 | 'GroupByKey' >> GroupByKey()
 			 | 'Generate Dummy Rows' >> ParDo(DummyRowMaker())
-			 | 'Write' >> BigtableWrite(project_id=PROJECT_ID,
+			 | 'Write' >> WriteToBigTable(project_id=PROJECT_ID,
 																	instance_id=INSTANCE_ID,
 																	table_id=TABLE_ID))
 	p.run()
