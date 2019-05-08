@@ -250,15 +250,16 @@ class BigtableSource(iobase.BoundedSource):
     return bundles
 
   def read(self, range_tracker):
-    for row in self._get_table().read_rows(start_key=range_tracker.start_position(),
-                                           end_key=range_tracker.stop_position(),
-                                           filter_=self.beam_options['filter_']):
+    rows = self._get_table().read_rows(start_key=range_tracker.start_position(),
+                                       end_key=range_tracker.stop_position(),
+                                       filter_=self.beam_options['filter_'])
+    for row in rows:
       if range_tracker.try_claim(row.row_key):
         self.row_count.inc()
         yield row
       else:
-        # TODO: Modify the client ot be able to cancel read_row request
-        break
+        # Modifying the read_rows() to cancel further requests
+        rows.stop = True
 
   def display_data(self):
     return {'projectId': DisplayDataItem(self.beam_options['project_id'],
