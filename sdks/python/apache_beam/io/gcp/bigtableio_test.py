@@ -24,7 +24,7 @@ import mock
 import sys
 import unittest
 
-from beam_bigtable import BigtableSource
+from beam_bigtable import _BigtableSource
 
 try:
   from google.cloud.bigtable import Client
@@ -72,7 +72,6 @@ RANGES_DICT = {
 SIZE_768M = 805306368
 SIZE_9984M = 10468982784
 
-@unittest.skipIf(Table is None, 'GCP Bigtable dependencies are not installed')
 @unittest.skipIf(Client is None, 'GCP Bigtable dependencies are not installed')
 class BigtableSourceTest(unittest.TestCase):
   def setUp(self):
@@ -103,7 +102,7 @@ class BigtableSourceTest(unittest.TestCase):
   def test_estimate_size(self, mock_sample_row_keys):
     mock_sample_row_keys.return_value = list(self._mock_sample_keys(KEYS_1))
     self.assertTrue(mock_sample_row_keys)
-    self.assertEqual(BigtableSource(self.project_id, self.instance_id, self.table_id)
+    self.assertEqual(_BigtableSource(self.project_id, self.instance_id, self.table_id)
                      .estimate_size(), SIZE_768M * len(KEYS_1))
 
   @mock.patch.object(Table, 'sample_row_keys')
@@ -111,7 +110,7 @@ class BigtableSourceTest(unittest.TestCase):
     mock_sample_row_keys.return_value = list(self._mock_sample_keys(KEYS_1))
     pos_start = b'beam_key0672496'
     pos_stop = b'beam_key1582279'
-    source = BigtableSource(self.project_id, self.instance_id, self.table_id)
+    source = _BigtableSource(self.project_id, self.instance_id, self.table_id)
     range_tracker = source.get_range_tracker(pos_start, pos_stop)
     self.assertEqual(range_tracker.start_position(), pos_start)
     self.assertEqual(range_tracker.stop_position(), pos_stop)
@@ -119,7 +118,7 @@ class BigtableSourceTest(unittest.TestCase):
   @mock.patch.object(Table, 'sample_row_keys')
   def test_split(self, mock_sample_row_keys):
     mock_sample_row_keys.return_value = list(self._mock_sample_keys(KEYS_1))
-    bundles = list(BigtableSource(self.project_id, self.instance_id, self.table_id)
+    bundles = list(_BigtableSource(self.project_id, self.instance_id, self.table_id)
                    .split(desired_bundle_size=None))
     bundles.sort()
     print 'len(bundles) = ', len(bundles)
@@ -140,7 +139,7 @@ class BigtableSourceTest(unittest.TestCase):
         yield PartialRowData(self._key_bytes('beam_key%07d' % i))
 
     mock_read_rows.return_value = _mock_read_list()
-    bigtable = BigtableSource(self.project_id, self.instance_id, self.table_id)
+    bigtable = _BigtableSource(self.project_id, self.instance_id, self.table_id)
     rows = list(bigtable.read(bigtable.get_range_tracker()))
     self.assertEqual(len(rows), row_count)
     for row in rows:
@@ -158,7 +157,7 @@ class BigtableSourceTest(unittest.TestCase):
 
     mock_sample_row_keys.return_value = list(self._mock_sample_keys())
     mock_read_rows.return_value = _mock_read_rows()
-    source = BigtableSource(self.project_id, self.instance_id, self.table_id)
+    source = _BigtableSource(self.project_id, self.instance_id, self.table_id)
 
     for split_bundle in source.split(None):
       range_tracker = source.get_range_tracker(split_bundle.start_position, split_bundle.stop_position)
@@ -191,7 +190,7 @@ class BigtableSourceTest(unittest.TestCase):
   def test_read_table(self, mock_read_rows, mock_sample_row_keys):
     mock_sample_row_keys.return_value = list(self._mock_sample_keys(KEYS_2))
     mock_read_rows.side_effect = self._mocking_read_rows
-    source = BigtableSource(self.project_id, self.instance_id, self.table_id)
+    source = _BigtableSource(self.project_id, self.instance_id, self.table_id)
 
     # TODO: Need to implement mock-reader and row counter
 

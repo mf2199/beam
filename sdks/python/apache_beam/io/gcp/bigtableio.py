@@ -53,7 +53,7 @@ try:
 except ImportError:
   Client = None
 
-__all__ = ['BigtableSource', 'WriteToBigTable']
+__all__ = ['WriteToBigTable']
 
 
 class _BigTableWriteFn(beam.DoFn):
@@ -74,27 +74,27 @@ class _BigTableWriteFn(beam.DoFn):
       table_id(str): GCP Table to write the `DirectRows`
     """
     super(_BigTableWriteFn, self).__init__()
-    self.beam_options = {'project_id': project_id,
-                         'instance_id': instance_id,
-                         'table_id': table_id}
+    self._beam_options = {'project_id': project_id,
+                          'instance_id': instance_id,
+                          'table_id': table_id}
     self.table = None
     self.batcher = None
     self.written = Metrics.counter(self.__class__, 'Written Row')
 
   def __getstate__(self):
-    return self.beam_options
+    return self._beam_options
 
   def __setstate__(self, options):
-    self.beam_options = options
+    self._beam_options = options
     self.table = None
     self.batcher = None
     self.written = Metrics.counter(self.__class__, 'Written Row')
 
   def start_bundle(self):
     if self.table is None:
-      client = Client(project=self.beam_options['project_id'])
-      instance = client.instance(self.beam_options['instance_id'])
-      self.table = instance.table(self.beam_options['table_id'])
+      client = Client(project=self._beam_options['project_id'])
+      instance = client.instance(self._beam_options['instance_id'])
+      self.table = instance.table(self._beam_options['table_id'])
     self.batcher = self.table.mutations_batcher()
 
   def process(self, row):
@@ -114,11 +114,11 @@ class _BigTableWriteFn(beam.DoFn):
     self.batcher = None
 
   def display_data(self):
-    return {'projectId': DisplayDataItem(self.beam_options['project_id'],
+    return {'projectId': DisplayDataItem(self._beam_options['project_id'],
                                          label='Bigtable Project Id'),
-            'instanceId': DisplayDataItem(self.beam_options['instance_id'],
+            'instanceId': DisplayDataItem(self._beam_options['instance_id'],
                                           label='Bigtable Instance Id'),
-            'tableId': DisplayDataItem(self.beam_options['table_id'],
+            'tableId': DisplayDataItem(self._beam_options['table_id'],
                                        label='Bigtable Table Id')
            }
 
@@ -129,8 +129,7 @@ class WriteToBigTable(beam.PTransform):
   A PTransform that write a list of `DirectRow` into the Bigtable Table
 
   """
-  def __init__(self, project_id=None, instance_id=None,
-               table_id=None):
+  def __init__(self, project_id=None, instance_id=None, table_id=None):
     """ The PTransform to access the Bigtable Write connector
     Args:
       project_id(str): GCP Project of to write the Rows
@@ -138,21 +137,21 @@ class WriteToBigTable(beam.PTransform):
       table_id(str): GCP Table to write the `DirectRows`
     """
     super(WriteToBigTable, self).__init__()
-    self.beam_options = {'project_id': project_id,
+    self._beam_options = {'project_id': project_id,
                          'instance_id': instance_id,
                          'table_id': table_id}
 
   def expand(self, pvalue):
-    beam_options = self.beam_options
+    beam_options = self._beam_options
     return (pvalue
             | beam.ParDo(_BigTableWriteFn(beam_options['project_id'],
                                           beam_options['instance_id'],
                                           beam_options['table_id'])))
 
 
-class BigtableSource(iobase.BoundedSource):
+class _BigtableSource(iobase.BoundedSource):
   def __init__(self, project_id, instance_id, table_id, filter_=None):
-    """ Constructor of the Read connector of Bigtable
+    """ A BoundedSource for reading from BigTable.
 
     Args:
       project_id: [string] GCP Project of to write the Rows
@@ -161,28 +160,28 @@ class BigtableSource(iobase.BoundedSource):
       filter_: [RowFilter] Filter to apply to columns in a row.
     """
     super(self.__class__, self).__init__()
-    self._init({'project_id': project_id,
+    self._initialize({'project_id': project_id,
                 'instance_id': instance_id,
                 'table_id': table_id,
                 'filter_': filter_})
 
   def __getstate__(self):
-    return self.beam_options
+    return self._beam_options
 
   def __setstate__(self, options):
-    self._init(options)
+    self._initialize(options)
 
-  def _init(self, options):
-    self.beam_options = options
+  def _initialize(self, options):
+    self._beam_options = options
     self.table = None
     self.sample_row_keys = None
     self.row_count = Metrics.counter(self.__class__.__name__, 'Row count')
 
   def _get_table(self):
     if self.table is None:
-      self.table = Client(project=self.beam_options['project_id'])\
-                      .instance(self.beam_options['instance_id'])\
-                      .table(self.beam_options['table_id'])
+      self.table = Client(project=self._beam_options['project_id'])\
+                      .instance(self._beam_options['instance_id'])\
+                      .table(self._beam_options['table_id'])
     return self.table
 
   def get_sample_row_keys(self):
@@ -252,7 +251,7 @@ class BigtableSource(iobase.BoundedSource):
   def read(self, range_tracker):
     rows = self._get_table().read_rows(start_key=range_tracker.start_position(),
                                        end_key=range_tracker.stop_position(),
-                                       filter_=self.beam_options['filter_'])
+                                       filter_=self._beam_options['filter_'])
     for row in rows:
       if range_tracker.try_claim(row.row_key):
         self.row_count.inc()
@@ -262,16 +261,16 @@ class BigtableSource(iobase.BoundedSource):
         rows.stop = True
 
   def display_data(self):
-    return {'projectId': DisplayDataItem(self.beam_options['project_id'],
+    return {'projectId': DisplayDataItem(self._beam_options['project_id'],
                                          label='Bigtable Project Id',
                                          key='projectId'),
-            'instanceId': DisplayDataItem(self.beam_options['instance_id'],
+            'instanceId': DisplayDataItem(self._beam_options['instance_id'],
                                           label='Bigtable Instance Id',
                                           key='instanceId'),
-            'tableId': DisplayDataItem(self.beam_options['table_id'],
+            'tableId': DisplayDataItem(self._beam_options['table_id'],
                                        label='Bigtable Table Id',
                                        key='tableId'),
-            'filter_': DisplayDataItem(self.beam_options['filter_'],
+            'filter_': DisplayDataItem(self._beam_options['filter_'],
                                        label='Bigtable Filter',
                                        key='filter_')
             }
