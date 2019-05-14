@@ -53,7 +53,7 @@ try:
 except ImportError:
   Client = None
 
-__all__ = ['WriteToBigTable']
+__all__ = ['ReadFromBigTable', 'WriteToBigTable']
 
 
 class _BigTableWriteFn(beam.DoFn):
@@ -189,7 +189,7 @@ class _BigtableSource(iobase.BoundedSource):
 
     The returned row keys will delimit contiguous sections of the table of
     approximately equal size, which can be used to break up the data for
-    distributed tasks like mapreduces.
+    distributed tasks.
     :returns: A cancel-able iterator. Can be consumed by calling ``next()``
     			  or by casting to a :class:`list` and can be cancelled by
     			  calling ``cancel()``.
@@ -274,3 +274,25 @@ class _BigtableSource(iobase.BoundedSource):
                                        label='Bigtable Filter',
                                        key='filter_')
             }
+
+
+class ReadFromBigTable(beam.PTransform):
+  def __init__(self, project_id, instance_id, table_id):
+    """ The PTransform to access the Bigtable Read connector
+
+    Args:
+      project_id(str): GCP Project of to read the Rows
+      instance_id(str): GCP Instance to read the Rows
+      table_id(str): GCP Table to read the Rows
+    """
+    super(self.__class__, self).__init__()
+    self._beam_options = {'project_id': project_id,
+                         'instance_id': instance_id,
+                         'table_id': table_id}
+
+  def expand(self, pvalue):
+    beam_options = self._beam_options
+    return (pvalue
+            | iobase.Read(_BigtableSource(project_id=beam_options['project_id'],
+                                          instance_id=beam_options['instance_id'],
+                                          table_id=beam_options['table_id'])))

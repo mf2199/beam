@@ -112,9 +112,9 @@ class BigtableIOTest(unittest.TestCase):
 
     p = beam.Pipeline(options=pipeline_options)
     count = (p
-             | 'Read from Bigtable' >> Read(bigtableio.BigtableSource(project_id=PROJECT_ID,
-                                                                      instance_id=INSTANCE_ID,
-                                                                      table_id=TABLE_ID))
+             | 'Read from Bigtable' >> bigtableio.ReadFromBigTable(project_id=PROJECT_ID,
+                                                                   instance_id=INSTANCE_ID,
+                                                                   table_id=TABLE_ID)
              | 'Count Rows' >> Count.Globally())
     self.result = p.run()
     self.result.wait_until_finish()
