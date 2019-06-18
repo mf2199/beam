@@ -24,7 +24,7 @@ import mock
 import sys
 import unittest
 
-from beam_bigtable import _BigtableSource
+from bigtableio import _BigtableSource
 
 try:
   from google.cloud.bigtable import Client
